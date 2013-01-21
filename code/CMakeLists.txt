@@ -422,6 +422,12 @@ SET(FBX_SRCS
 )
 SOURCE_GROUP( FBX FILES ${FBX_SRCS})
 
+SET(Spectre_SRCS
+	SpectreExporter.cpp
+	SpectreExporter.h
+)
+SOURCE_GROUP( Spectre FILES ${Spectre_SRCS})
+
 
 SET( PostProcessing_SRCS
 	CalcTangentsProcess.cpp
@@ -663,6 +669,7 @@ SET( assim_src
 	${IFC_SRCS}
 	${XGL_SRCS}
 	${FBX_SRCS}
+	${Spectre_SRCS}
 	
 	# Third-party libraries
 	${IrrXML_SRCS}

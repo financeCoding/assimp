@@ -75,6 +75,7 @@ void ExportSceneObj(const char*,IOSystem*, const aiScene*);
 void ExportSceneSTL(const char*,IOSystem*, const aiScene*);
 void ExportScenePly(const char*,IOSystem*, const aiScene*);
 void ExportScene3DS(const char*, IOSystem*, const aiScene*) {}
+void ExportSceneSpectre(const char*,IOSystem*, const aiScene*);
 
 // ------------------------------------------------------------------------------------------------
 // global array of all export formats which Assimp supports in its current build
@@ -98,6 +99,10 @@ Exporter::ExportFormatEntry gExporters[] =
 	Exporter::ExportFormatEntry( "ply", "Stanford Polygon Library", "ply" , &ExportScenePly, 
 		aiProcess_PreTransformVertices
 	),
+#endif
+
+#ifndef ASSIMP_BUILD_NO_SPECTRE_EXPORTER
+	Exporter::ExportFormatEntry( "spectre_json", "Spectre JSON format", "mesh", &ExportSceneSpectre),
 #endif
 
 //#ifndef ASSIMP_BUILD_NO_3DS_EXPORTER
