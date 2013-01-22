@@ -179,7 +179,7 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 	unsigned int offset = 0;
 
 	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset, false);
-	offset += 3;
+	offset += floatSize * 3;
 
 	// Output normals
 	if (mesh->HasNormals()) {
