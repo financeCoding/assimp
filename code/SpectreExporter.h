@@ -39,7 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 /** @file PlyExporter.h
- * Declares the exporter class to write a scene to a Polygon Library (ply)
+ * Declares the exporter class to write a scene to a Spectre Library (mesh)
  */
 #ifndef AI_SPECTREEXPORTER_H_INC
 #define AI_SPECTREEXPORTER_H_INC
@@ -69,9 +69,14 @@ public:
 private:
 
 	void WriteMesh(const aiMesh* mesh);
+	void WriteMeshBounds(const aiMesh* mesh);
+	void WriteMeshInputLayout(const aiMesh* mesh);
+	void WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset, bool normalized);
 	void WriteMeshVertices(const aiMesh* mesh);
 	void WriteVertexData(const aiMesh* mesh, unsigned int index);
 	void WriteMeshIndices(const aiMesh* mesh);
+
+	static unsigned int GetVertexStride(const aiMesh* mesh);
 
 private:
 

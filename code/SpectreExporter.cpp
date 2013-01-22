@@ -49,7 +49,7 @@ using namespace Assimp;
 namespace Assimp	{
 
 // ------------------------------------------------------------------------------------------------
-// Worker function for exporting a scene to PLY. Prototyped and registered in Exporter.cpp
+// Worker function for exporting a scene to Spectre. Prototyped and registered in Exporter.cpp
 void ExportSceneSpectre(const char* pFile,IOSystem* pIOSystem, const aiScene* pScene)
 {
 	// invoke the exporter 
@@ -61,11 +61,6 @@ void ExportSceneSpectre(const char* pFile,IOSystem* pIOSystem, const aiScene* pS
 }
 
 } // end of namespace Assimp
-
-#define PLY_EXPORT_HAS_NORMALS 0x1
-#define PLY_EXPORT_HAS_TANGENTS_BITANGENTS 0x2
-#define PLY_EXPORT_HAS_TEXCOORDS 0x4
-#define PLY_EXPORT_HAS_COLORS (PLY_EXPORT_HAS_TEXCOORDS << AI_MAX_NUMBER_OF_TEXTURECOORDS)
 
 // ------------------------------------------------------------------------------------------------
 SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
@@ -99,20 +94,152 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter :: WriteMesh(const aiMesh* m)
+void SpectreExporter :: WriteMesh(const aiMesh* mesh)
 {
 	const std::string scopeIndent = indent + indent;
 
 	// Start the scope
 	mOutput << scopeIndent << "{" << endl;
 
+	// Write out the index width
+	mOutput << scopeIndent << indent << "\"indexWidth\": ";
+
+	if ((mesh->mNumFaces * 3) < 0xFFFF) {
+		mOutput << 2;
+	} else {
+		mOutput << 4;
+	}
+
+	mOutput << "," << endl;
+
+	// Write out bounds
+	WriteMeshBounds(mesh);
+	mOutput << ',' << endl;
+
+	// Write out input layout
+	WriteMeshInputLayout(mesh);
+	mOutput << "," << endl;
+
 	// Write out vertices
-	WriteMeshVertices(m);
+	WriteMeshVertices(mesh);
 	mOutput << "," << endl;
 
 	// Write out indices
-	WriteMeshIndices(m);
+	WriteMeshIndices(mesh);
 	mOutput << endl;
+
+	// End the scope
+	mOutput << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteMeshBounds(const aiMesh* mesh)
+{
+	const std::string scopeIndent = indent + indent + indent;
+
+	// Start the scope
+	mOutput << scopeIndent << "\"bounds\": [" << endl;
+
+	// Determine the bounds
+	aiVector3D min(std::numeric_limits<float>::max());
+	aiVector3D max(std::numeric_limits<float>::min());
+
+	unsigned int vertexCount = mesh->mNumVertices;
+
+	for (unsigned int i = 0; i < vertexCount; ++i) {
+		aiVector3D position = mesh->mVertices[i];
+
+		min.x = (position.x < min.x) ? position.x : min.x;
+		min.y = (position.y < min.y) ? position.y : min.y;
+		min.z = (position.z < min.z) ? position.z : min.z;
+
+		max.x = (position.x > max.x) ? position.x : max.x;
+		max.y = (position.y > max.y) ? position.y : max.y;
+		max.z = (position.z > max.z) ? position.z : max.z;
+	}
+
+	// Write out the bounds
+	mOutput << scopeIndent << indent << min.x << ", " << min.y << ", " << min.z << "," << endl;
+	mOutput << scopeIndent << indent << max.x << ", " << min.y << ", " << max.z << endl;
+
+	// End the scope
+	mOutput << scopeIndent << "]";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
+{
+	const std::string scopeIndent = indent + indent + indent;
+
+	// Start the scope
+	mOutput << scopeIndent << "\"attributes\": {" << endl;
+
+	const unsigned int floatSize = sizeof(float);
+	unsigned int stride = GetVertexStride(mesh);
+	unsigned int offset = 0;
+
+	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset, false);
+	offset += 3;
+
+	// Output normals
+	if (mesh->HasNormals()) {
+		mOutput << "," << endl;
+		WriteMeshVertexAttribute("NORMAL", "float", 3, stride, offset, false);
+		offset += floatSize * 3;
+	}
+
+	// Output tangent/bitangent
+	if (mesh->HasTangentsAndBitangents()) {
+		mOutput << "," << endl;
+		WriteMeshVertexAttribute("TANGENT", "float", 3, stride, offset, false);
+		offset += floatSize * 3;
+
+		mOutput << "," << endl;
+		WriteMeshVertexAttribute("BITANGENT", "float", 3, stride, offset, false);
+		offset += floatSize * 3;
+	}
+
+	// Output all texture coordinates
+	const unsigned int numUVChannels = mesh->GetNumUVChannels();
+	
+	for (unsigned int c = 0; c < numUVChannels; ++c) {
+		std::string name = "TEXCOORD" + c;
+		mOutput << "," << endl;
+		const unsigned int components = mesh->mNumUVComponents[c];
+		WriteMeshVertexAttribute(name.c_str(), "float", components, stride, offset, false);
+		offset += floatSize * components;
+	}
+
+	// Output all color channels
+	const unsigned int numColorChannels = mesh->GetNumColorChannels();
+
+	for (unsigned int c = 0; c < numColorChannels; ++c) {
+		std::string name = "COLOR" + c;
+		mOutput << "," << endl;
+		WriteMeshVertexAttribute(name.c_str(), "float", 4, stride, offset, false);
+		offset += floatSize * 4;
+	}
+
+	// End the scope
+	mOutput << endl << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset, bool normalized)
+{
+	const std::string scopeIndent = indent + indent + indent + indent;
+	const std::string attribIndent = scopeIndent + indent;
+
+	// Start the scope
+	mOutput << scopeIndent << "\"" << name << "\": {" << endl;
+
+	// Write out the vertex attributes
+	mOutput << attribIndent << "\"name\": \"" << name << "\"," << endl;
+	mOutput << attribIndent << "\"type\": \"" << type << "\"," << endl;
+	mOutput << attribIndent << "\"numElements\": " << components << "," << endl;
+	mOutput << attribIndent << "\"normalized\": " << ((normalized) ? "true," : "false,") << endl;
+	mOutput << attribIndent << "\"stride\": " << stride << "," << endl;
+	mOutput << attribIndent << "\"offset\": " << offset << endl;
 
 	// End the scope
 	mOutput << scopeIndent << "}";
@@ -149,6 +276,12 @@ void SpectreExporter :: WriteVertexData(const aiMesh* mesh, unsigned int index)
 	// Output positions
 	aiVector3D position = mesh->mVertices[index];
 	mOutput << scopeIndent << position.x << ", " << position.y << ", " << position.z;
+
+	// Output normals
+	if (mesh->HasNormals()) {
+		aiVector3D normal = mesh->mNormals[index];
+		mOutput << ", " << normal.x << ", " << normal.y << ", " << normal.z;
+	}
 
 	// Output tangent/bitangent
 	if (mesh->HasTangentsAndBitangents()) {
@@ -206,6 +339,37 @@ void SpectreExporter :: WriteMeshIndices(const aiMesh* mesh)
 
 	// End the scope
 	mOutput << scopeIndent << "]";
+}
+
+// ------------------------------------------------------------------------------------------------
+unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
+{
+	const unsigned int floatSize = sizeof(float);
+
+	// Position
+	unsigned int stride = floatSize * 3;
+
+	// Normals
+	if (mesh->HasNormals()) {
+		stride += floatSize * 3;
+	}
+
+	// Tangent/bitangent
+	if (mesh->HasTangentsAndBitangents()) {
+		stride += floatSize * 6;
+	}
+
+	// Texture coordinates
+	const unsigned int numUVChannels = mesh->GetNumUVChannels();
+	
+	for (unsigned int c = 0; c < numUVChannels; ++c) {
+		stride += floatSize * mesh->mNumUVComponents[c];
+	}
+
+	// Color channels
+	stride += floatSize * 4 * mesh->GetNumColorChannels();
+
+	return stride;
 }
 
 #endif
