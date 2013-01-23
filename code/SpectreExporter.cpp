@@ -203,7 +203,8 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 	const unsigned int numUVChannels = mesh->GetNumUVChannels();
 	
 	for (unsigned int c = 0; c < numUVChannels; ++c) {
-		std::string name = "TEXCOORD" + c;
+		std::string name = "TEXCOORDX";
+		name[8] = (char)(c + 48);
 		mOutput << "," << endl;
 		const unsigned int components = mesh->mNumUVComponents[c];
 		WriteMeshVertexAttribute(name.c_str(), "float", components, stride, offset, false);
@@ -214,7 +215,8 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 	const unsigned int numColorChannels = mesh->GetNumColorChannels();
 
 	for (unsigned int c = 0; c < numColorChannels; ++c) {
-		std::string name = "COLOR" + c;
+		std::string name = "COLORX";
+		name[5] = (char)(c + 48);
 		mOutput << "," << endl;
 		WriteMeshVertexAttribute(name.c_str(), "float", 4, stride, offset, false);
 		offset += floatSize * 4;
