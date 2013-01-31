@@ -179,7 +179,10 @@ void SpectreExporter :: WriteMeshPart(const aiMesh* mesh, unsigned int* offset)
 	// Write the offset and count
 	const unsigned int indexCount = mesh->mNumFaces * 3;
 	mOutput << scopeIndent << indent << "\"offset\": " << *offset << "," << endl;
-	mOutput << scopeIndent << indent << "\"count\": " << indexCount << endl;
+	mOutput << scopeIndent << indent << "\"count\": " << indexCount << "," << endl;
+
+	// Write the mesh bounds
+	WriteMeshBounds(mesh);
 	
 	// Increment the count
 	*offset += indexCount;
@@ -192,9 +195,6 @@ void SpectreExporter :: WriteMeshPart(const aiMesh* mesh, unsigned int* offset)
 void SpectreExporter :: WriteMeshBounds(const aiMesh* mesh)
 {
 	const std::string scopeIndent = indent + indent + indent;
-
-	// Start the scope
-	mOutput << scopeIndent << "\"bounds\": [" << endl;
 
 	// Determine the bounds
 	aiVector3D min(std::numeric_limits<float>::max());
@@ -215,11 +215,8 @@ void SpectreExporter :: WriteMeshBounds(const aiMesh* mesh)
 	}
 
 	// Write out the bounds
-	mOutput << scopeIndent << indent << min.x << ", " << min.y << ", " << min.z << "," << endl;
-	mOutput << scopeIndent << indent << max.x << ", " << min.y << ", " << max.z << endl;
-
-	// End the scope
-	mOutput << scopeIndent << "]";
+	mOutput << scopeIndent << "\"aabbMin\": [" << min.x << ", " << min.y << ", " << min.z << "]," << endl;
+	mOutput << scopeIndent << "\"aabbMax\": [" << max.x << ", " << min.y << ", " << max.z << "]"  << endl;
 }
 
 // ------------------------------------------------------------------------------------------------
