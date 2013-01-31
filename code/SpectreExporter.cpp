@@ -73,30 +73,15 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 	const std::locale& l = std::locale("C");
 	mOutput.imbue(l);
 
-	aiNode* node = pScene->mRootNode->mChildren[1];
-	//aiAnimation* anim = pScene->mAnimations[0];
-
 	// Write the header
 	mOutput << "{" << endl;
+	WriteHeader();
 
-	WriteNode(pScene->mRootNode->mChildren[0]);
-/*
-	mOutput << indent << "\"meshes\": [" << endl;
+	// Write out the mesh file.
+	// Currently assuming MD5
+	const aiNode* rootNode = pScene->mRootNode;
+	WriteNode(rootNode->mChildren[0], rootNode->mChildren[1]->mChildren[0]);
 
-	const unsigned int numMeshesMinusOne = pScene->mNumMeshes - 1;
-
-	for (unsigned int i = 0; i < numMeshesMinusOne; ++i) {
-		WriteMesh(pScene->mMeshes[i]);
-
-		mOutput << "," << endl;
-	}
-
-	WriteMesh(pScene->mMeshes[numMeshesMinusOne]);
-
-	// Write the footer
-	mOutput << endl;
-	mOutput << indent << "]" << endl;
-*/
 	mOutput << "}";
 }
 
@@ -107,31 +92,31 @@ void SpectreExporter :: WriteHeader()
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter :: WriteNode(const aiNode* node)
+void SpectreExporter :: WriteNode(const aiNode* meshNode, const aiNode* hierarchyNode)
 {
 	const std::string scopeIndent = indent + indent;
 
 	// Write the attributes
 	// Assuming that the vertex attributes will be the same for a grouping of meshes
-	WriteMeshInputLayout(pScene->mMeshes[node->mMeshes[0]]);
+	WriteMeshInputLayout(pScene->mMeshes[meshNode->mMeshes[0]]);
 	mOutput << "," << endl;
 
 	// Write the individual meshes
 	unsigned int meshOffset = 0;
-	unsigned int meshCountMinusOne = node->mNumMeshes - 1;
+	const unsigned int meshCountMinusOne = meshNode->mNumMeshes - 1;
 
 	mOutput << indent << "\"meshes\": [" << endl;
 
 	const aiMesh* mesh;
 
 	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
-		mesh = GetMesh(node, i);
+		mesh = GetMesh(meshNode, i);
 
 		WriteMeshPart(mesh, &meshOffset);
 		mOutput << "," << endl;
 	}
 
-	mesh = GetMesh(node, meshCountMinusOne);
+	mesh = GetMesh(meshNode, meshCountMinusOne);
 	WriteMeshPart(mesh, &meshOffset);
 	mOutput << endl << indent << "]," << endl;
 
@@ -142,13 +127,13 @@ void SpectreExporter :: WriteNode(const aiNode* node)
 	mOutput << indent << "\"vertices\": [" << endl;
 
 	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
-		mesh = GetMesh(node, i);
+		mesh = GetMesh(meshNode, i);
 
 		WriteMeshVertices(mesh);
 		mOutput << "," << endl;
 	}
 
-	mesh = GetMesh(node, meshCountMinusOne);
+	mesh = GetMesh(meshNode, meshCountMinusOne);
 	WriteMeshVertices(mesh);
 	mOutput << endl << indent << "]," << endl;
 
@@ -157,15 +142,30 @@ void SpectreExporter :: WriteNode(const aiNode* node)
 	meshOffset = 0;
 
 	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
-		mesh = GetMesh(node, i);
+		mesh = GetMesh(meshNode, i);
 
 		WriteIndexData(mesh, &meshOffset);
 		mOutput << "," << endl;
 	}
 
-	mesh = GetMesh(node, meshCountMinusOne);
+	mesh = GetMesh(meshNode, meshCountMinusOne);
 	WriteIndexData(mesh, &meshOffset);
-	mOutput << endl << indent << "]" << endl;
+	mOutput << endl << indent << "]," << endl;
+
+	// Write the bones
+	mOutput << indent << "\"bones\": [" << endl;
+
+	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+		mesh = GetMesh(meshNode, i);
+
+		WriteMeshBones(mesh, hierarchyNode);
+		mOutput << "," << endl;
+	}
+
+	mesh = GetMesh(meshNode, meshCountMinusOne);
+	WriteMeshBones(mesh, hierarchyNode);
+
+	mOutput << endl << indent << "]";
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -177,7 +177,7 @@ void SpectreExporter :: WriteMeshPart(const aiMesh* mesh, unsigned int* offset)
 	mOutput << scopeIndent << "{" << endl;
 
 	// Write the offset and count
-	unsigned int indexCount = mesh->mNumFaces * 3;
+	const unsigned int indexCount = mesh->mNumFaces * 3;
 	mOutput << scopeIndent << indent << "\"offset\": " << *offset << "," << endl;
 	mOutput << scopeIndent << indent << "\"count\": " << indexCount << endl;
 	
@@ -231,7 +231,7 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 	mOutput << scopeIndent << "\"attributes\": [" << endl;
 
 	const unsigned int floatSize = sizeof(float);
-	unsigned int stride = GetVertexStride(mesh);
+	const unsigned int stride = GetVertexStride(mesh);
 	unsigned int offset = 0;
 
 	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset);
@@ -396,6 +396,103 @@ void SpectreExporter :: WriteIndexData(const aiMesh* mesh, unsigned int* offset)
 }
 
 // ------------------------------------------------------------------------------------------------
+void SpectreExporter ::  WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode)
+{
+	const unsigned int boneCountMinusOne = mesh->mNumBones - 1;
+
+	for (unsigned int i = 0; i < boneCountMinusOne; ++i) {
+		WriteBone(mesh->mBones[i], hierarchyNode);
+		mOutput << "," << endl;
+	}
+
+	WriteBone(mesh->mBones[boneCountMinusOne], hierarchyNode);
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter ::  WriteBone(const aiBone* bone, const aiNode* hierarchyNode)
+{
+	const std::string scopeIndent = indent + indent;
+	const std::string boneIndent = scopeIndent + indent;
+
+	// Begin the scope
+	mOutput << scopeIndent << "{" << endl;
+
+	// Output the bone name
+	mOutput << boneIndent << "\"name\": \"" << bone->mName.C_Str() << "\"," << endl;
+
+	// Find the node
+	const aiNode* boneNode = FindBoneInHierarchy(bone->mName, hierarchyNode);
+
+	// Output the transform
+	WriteTransform("transform", boneNode->mTransformation);
+	mOutput << "," << endl;
+
+	// Output the offset matrix
+	// Check for the root node
+	if (boneNode == hierarchyNode) {
+		// Invert the transform for the root node
+		aiMatrix4x4 inverse(boneNode->mTransformation);
+		inverse.Inverse();
+
+		WriteTransform("offsetTransform", inverse);
+	} else {
+		WriteTransform("offsetTransform", bone->mOffsetMatrix);
+	}
+
+	// Output the vertices
+	const unsigned int numVertexWeightsMinusOne = bone->mNumWeights - 1;
+
+	if (numVertexWeightsMinusOne != -1) {
+		mOutput << "," << endl << boneIndent << "\"vertices\": [";
+
+		for (unsigned int i = 0; i < numVertexWeightsMinusOne; ++i) {
+			mOutput << bone->mWeights[i].mVertexId << ", ";
+		}
+
+		mOutput << bone->mWeights[numVertexWeightsMinusOne].mVertexId << "],";
+
+		// Output the weights
+		mOutput << endl << boneIndent << "\"weights\": [";
+
+		for (unsigned int i = 0; i < numVertexWeightsMinusOne; ++i) {
+			mOutput << bone->mWeights[i].mWeight << ", ";
+		}
+
+		mOutput << bone->mWeights[numVertexWeightsMinusOne].mWeight << "]";
+	}
+
+	// Output the children
+	const unsigned int numChildrenMinusOne = boneNode->mNumChildren - 1;
+
+	if (numChildrenMinusOne != -1) {
+		mOutput << "," << endl << boneIndent << "\"children\": [";
+
+		for (unsigned int i = 0; i < numChildrenMinusOne; ++i) {
+			mOutput << "\"" << boneNode->mChildren[i]->mName.C_Str() << "\", ";
+		}
+
+		mOutput << "\"" << boneNode->mChildren[numChildrenMinusOne]->mName.C_Str() << "\"]";
+	}
+
+	// End the scope
+	mOutput << endl << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter ::  WriteTransform(const char* name, const aiMatrix4x4& transform)
+{
+	const std::string scopeIndent = indent + indent + indent;
+	const std::string rowIndent = scopeIndent + indent;
+
+	mOutput << scopeIndent << "\"" << name << "\": [" << endl;
+	mOutput << rowIndent << transform.a1 << ", " << transform.a2 << ", " << transform.a3 << ", " << transform.a4 << "," << endl;
+	mOutput << rowIndent << transform.b1 << ", " << transform.b2 << ", " << transform.b3 << ", " << transform.b4 << "," << endl;
+	mOutput << rowIndent << transform.c1 << ", " << transform.c2 << ", " << transform.c3 << ", " << transform.c4 << "," << endl;
+	mOutput << rowIndent << transform.d1 << ", " << transform.d2 << ", " << transform.d3 << ", " << transform.d4 << endl;
+	mOutput << scopeIndent << "]";
+}
+
+// ------------------------------------------------------------------------------------------------
 unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
 {
 	const unsigned int floatSize = sizeof(float);
@@ -424,6 +521,24 @@ unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
 	stride += floatSize * 4 * mesh->GetNumColorChannels();
 
 	return stride;
+}
+
+// ------------------------------------------------------------------------------------------------
+const aiNode* SpectreExporter ::  FindBoneInHierarchy(const aiString& name, const aiNode* node)
+{
+	if (name == node->mName) {
+		return node;
+	}
+
+	for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+		const aiNode* search = FindBoneInHierarchy(name, node->mChildren[i]);
+
+		if (search) {
+			return search;
+		}
+	}
+
+	return 0;
 }
 
 #endif

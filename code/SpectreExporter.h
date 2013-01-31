@@ -69,7 +69,7 @@ public:
 private:
 
 	void WriteHeader();
-	void WriteNode(const aiNode* node);
+	void WriteNode(const aiNode* meshNode, const aiNode* hierarchyNode);
 	void WriteMeshPart(const aiMesh* mesh, unsigned int* offset);
 
 	void WriteMeshBounds(const aiMesh* mesh);
@@ -78,8 +78,12 @@ private:
 	void WriteMeshVertices(const aiMesh* mesh);
 	void WriteVertexData(const aiMesh* mesh, unsigned int index);
 	void WriteIndexData(const aiMesh* mesh, unsigned int* offset);
+	void WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode);
+	void WriteBone(const aiBone* bone, const aiNode* hierarchyNode);
+	void WriteTransform(const char* name, const aiMatrix4x4& transform);
 
 	static unsigned int GetVertexStride(const aiMesh* mesh);
+	static const aiNode* FindBoneInHierarchy(const aiString& name, const aiNode* node);
 
 	inline const aiMesh* GetMesh(const aiNode* node, unsigned int index)
 	{
