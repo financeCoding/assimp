@@ -68,15 +68,23 @@ public:
 
 private:
 
-	void WriteMesh(const aiMesh* mesh);
+	void WriteHeader();
+	void WriteNode(const aiNode* node);
+	void WriteMeshPart(const aiMesh* mesh, unsigned int* offset);
+
 	void WriteMeshBounds(const aiMesh* mesh);
 	void WriteMeshInputLayout(const aiMesh* mesh);
-	void WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset, bool normalized);
+	void WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset);
 	void WriteMeshVertices(const aiMesh* mesh);
 	void WriteVertexData(const aiMesh* mesh, unsigned int index);
-	void WriteMeshIndices(const aiMesh* mesh);
+	void WriteIndexData(const aiMesh* mesh, unsigned int* offset);
 
 	static unsigned int GetVertexStride(const aiMesh* mesh);
+
+	inline const aiMesh* GetMesh(const aiNode* node, unsigned int index)
+	{
+		return pScene->mMeshes[node->mMeshes[index]];
+	}
 
 private:
 

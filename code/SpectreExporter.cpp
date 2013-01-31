@@ -73,8 +73,14 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 	const std::locale& l = std::locale("C");
 	mOutput.imbue(l);
 
+	aiNode* node = pScene->mRootNode->mChildren[1];
+	//aiAnimation* anim = pScene->mAnimations[0];
+
 	// Write the header
 	mOutput << "{" << endl;
+
+	WriteNode(pScene->mRootNode->mChildren[0]);
+/*
 	mOutput << indent << "\"meshes\": [" << endl;
 
 	const unsigned int numMeshesMinusOne = pScene->mNumMeshes - 1;
@@ -90,43 +96,93 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 	// Write the footer
 	mOutput << endl;
 	mOutput << indent << "]" << endl;
+*/
 	mOutput << "}";
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter :: WriteMesh(const aiMesh* mesh)
+void SpectreExporter :: WriteHeader()
+{
+
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteNode(const aiNode* node)
+{
+	const std::string scopeIndent = indent + indent;
+
+	// Write the attributes
+	// Assuming that the vertex attributes will be the same for a grouping of meshes
+	WriteMeshInputLayout(pScene->mMeshes[node->mMeshes[0]]);
+	mOutput << "," << endl;
+
+	// Write the individual meshes
+	unsigned int meshOffset = 0;
+	unsigned int meshCountMinusOne = node->mNumMeshes - 1;
+
+	mOutput << indent << "\"meshes\": [" << endl;
+
+	const aiMesh* mesh;
+
+	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+		mesh = GetMesh(node, i);
+
+		WriteMeshPart(mesh, &meshOffset);
+		mOutput << "," << endl;
+	}
+
+	mesh = GetMesh(node, meshCountMinusOne);
+	WriteMeshPart(mesh, &meshOffset);
+	mOutput << endl << indent << "]," << endl;
+
+	// Write the primitive type
+	mOutput << indent << "\"primitive\": \"triangles\"," << endl;
+
+	// Write the vertices
+	mOutput << indent << "\"vertices\": [" << endl;
+
+	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+		mesh = GetMesh(node, i);
+
+		WriteMeshVertices(mesh);
+		mOutput << "," << endl;
+	}
+
+	mesh = GetMesh(node, meshCountMinusOne);
+	WriteMeshVertices(mesh);
+	mOutput << endl << indent << "]," << endl;
+
+	// Write the indices
+	mOutput << indent << "\"indices\": [" << endl;
+	meshOffset = 0;
+
+	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+		mesh = GetMesh(node, i);
+
+		WriteIndexData(mesh, &meshOffset);
+		mOutput << "," << endl;
+	}
+
+	mesh = GetMesh(node, meshCountMinusOne);
+	WriteIndexData(mesh, &meshOffset);
+	mOutput << endl << indent << "]" << endl;
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteMeshPart(const aiMesh* mesh, unsigned int* offset)
 {
 	const std::string scopeIndent = indent + indent;
 
 	// Start the scope
 	mOutput << scopeIndent << "{" << endl;
 
-	// Write out the index width
-	mOutput << scopeIndent << indent << "\"indexWidth\": ";
-
-	if ((mesh->mNumFaces * 3) < 0xFFFF) {
-		mOutput << 2;
-	} else {
-		mOutput << 4;
-	}
-
-	mOutput << "," << endl;
-
-	// Write out bounds
-	WriteMeshBounds(mesh);
-	mOutput << ',' << endl;
-
-	// Write out input layout
-	WriteMeshInputLayout(mesh);
-	mOutput << "," << endl;
-
-	// Write out vertices
-	WriteMeshVertices(mesh);
-	mOutput << "," << endl;
-
-	// Write out indices
-	WriteMeshIndices(mesh);
-	mOutput << endl;
+	// Write the offset and count
+	unsigned int indexCount = mesh->mNumFaces * 3;
+	mOutput << scopeIndent << indent << "\"offset\": " << *offset << "," << endl;
+	mOutput << scopeIndent << indent << "\"count\": " << indexCount << endl;
+	
+	// Increment the count
+	*offset += indexCount;
 
 	// End the scope
 	mOutput << scopeIndent << "}";
@@ -169,33 +225,33 @@ void SpectreExporter :: WriteMeshBounds(const aiMesh* mesh)
 // ------------------------------------------------------------------------------------------------
 void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 {
-	const std::string scopeIndent = indent + indent + indent;
+	const std::string scopeIndent = indent;
 
 	// Start the scope
-	mOutput << scopeIndent << "\"attributes\": {" << endl;
+	mOutput << scopeIndent << "\"attributes\": [" << endl;
 
 	const unsigned int floatSize = sizeof(float);
 	unsigned int stride = GetVertexStride(mesh);
 	unsigned int offset = 0;
 
-	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset, false);
+	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset);
 	offset += floatSize * 3;
 
 	// Output normals
 	if (mesh->HasNormals()) {
 		mOutput << "," << endl;
-		WriteMeshVertexAttribute("NORMAL", "float", 3, stride, offset, false);
+		WriteMeshVertexAttribute("NORMAL", "float", 3, stride, offset);
 		offset += floatSize * 3;
 	}
 
 	// Output tangent/bitangent
 	if (mesh->HasTangentsAndBitangents()) {
 		mOutput << "," << endl;
-		WriteMeshVertexAttribute("TANGENT", "float", 3, stride, offset, false);
+		WriteMeshVertexAttribute("TANGENT", "float", 3, stride, offset);
 		offset += floatSize * 3;
 
 		mOutput << "," << endl;
-		WriteMeshVertexAttribute("BITANGENT", "float", 3, stride, offset, false);
+		WriteMeshVertexAttribute("BITANGENT", "float", 3, stride, offset);
 		offset += floatSize * 3;
 	}
 
@@ -207,7 +263,7 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 		name[8] = (char)(c + 48);
 		mOutput << "," << endl;
 		const unsigned int components = mesh->mNumUVComponents[c];
-		WriteMeshVertexAttribute(name.c_str(), "float", components, stride, offset, false);
+		WriteMeshVertexAttribute(name.c_str(), "float", components, stride, offset);
 		offset += floatSize * components;
 	}
 
@@ -218,30 +274,28 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 		std::string name = "COLORX";
 		name[5] = (char)(c + 48);
 		mOutput << "," << endl;
-		WriteMeshVertexAttribute(name.c_str(), "float", 4, stride, offset, false);
+		WriteMeshVertexAttribute(name.c_str(), "float", 4, stride, offset);
 		offset += floatSize * 4;
 	}
 
 	// End the scope
-	mOutput << endl << scopeIndent << "}";
+	mOutput << endl << scopeIndent << "]";
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter :: WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset, bool normalized)
+void SpectreExporter :: WriteMeshVertexAttribute(const char* name, const char* type, unsigned int components, unsigned int stride, unsigned int offset)
 {
-	const std::string scopeIndent = indent + indent + indent + indent;
+	const std::string scopeIndent = indent + indent;
 	const std::string attribIndent = scopeIndent + indent;
 
 	// Start the scope
-	mOutput << scopeIndent << "\"" << name << "\": {" << endl;
+	mOutput << scopeIndent << "{" << endl;
 
 	// Write out the vertex attributes
 	mOutput << attribIndent << "\"name\": \"" << name << "\"," << endl;
-	mOutput << attribIndent << "\"type\": \"" << type << "\"," << endl;
-	mOutput << attribIndent << "\"numElements\": " << components << "," << endl;
-	mOutput << attribIndent << "\"normalized\": " << ((normalized) ? "true," : "false,") << endl;
+	mOutput << attribIndent << "\"offset\": " << offset << "," << endl;
 	mOutput << attribIndent << "\"stride\": " << stride << "," << endl;
-	mOutput << attribIndent << "\"offset\": " << offset << endl;
+	mOutput << attribIndent << "\"format\": \"" << type << components << "\"" << endl;
 
 	// End the scope
 	mOutput << scopeIndent << "}";
@@ -250,11 +304,6 @@ void SpectreExporter :: WriteMeshVertexAttribute(const char* name, const char* t
 // ------------------------------------------------------------------------------------------------
 void SpectreExporter :: WriteMeshVertices(const aiMesh* mesh)
 {
-	const std::string scopeIndent = indent + indent + indent;
-
-	// Start the scope
-	mOutput << scopeIndent << "\"vertices\": [" << endl;
-
 	// Write out vertices
 	const unsigned int numVerticesMinusOne = mesh->mNumVertices - 1;
 
@@ -264,16 +313,12 @@ void SpectreExporter :: WriteMeshVertices(const aiMesh* mesh)
 	}
 
 	WriteVertexData(mesh, numVerticesMinusOne);
-	mOutput << endl;
-
-	// End the scope
-	mOutput << scopeIndent << "]";
 }
 
 // ------------------------------------------------------------------------------------------------
 void SpectreExporter :: WriteVertexData(const aiMesh* mesh, unsigned int index)
 {
-	const std::string scopeIndent = indent + indent + indent + indent;
+	const std::string scopeIndent = indent + indent;
 
 	// Output positions
 	aiVector3D position = mesh->mVertices[index];
@@ -318,29 +363,36 @@ void SpectreExporter :: WriteVertexData(const aiMesh* mesh, unsigned int index)
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter :: WriteMeshIndices(const aiMesh* mesh)
+void SpectreExporter :: WriteIndexData(const aiMesh* mesh, unsigned int* offset)
 {
-	const std::string scopeIndent = indent + indent + indent;
-
-	// Start the scope
-	mOutput << scopeIndent << "\"indices\": [" << endl;
+	const std::string scopeIndent = indent + indent;
 
 	// Write out indice data
-	const std::string faceIndent = scopeIndent + indent;
 	const unsigned int numFacesMinusOne = mesh->mNumFaces - 1;
 	unsigned int* faceIndices;
+	unsigned int face0;
+	unsigned int face1;
+	unsigned int face2;
 
 	for (unsigned i = 0; i < numFacesMinusOne; ++i) {
 		faceIndices = mesh->mFaces[i].mIndices;
 
-		mOutput << faceIndent << faceIndices[0] << ", " << faceIndices[1] << ", " << faceIndices[2] << "," << endl;
+		face0 = faceIndices[0] + (*offset);
+		face1 = faceIndices[1] + (*offset);
+		face2 = faceIndices[2] + (*offset);
+
+		mOutput << scopeIndent << face0 << ", " << face1 << ", " << face2 << "," << endl;
 	}
 
 	faceIndices = mesh->mFaces[numFacesMinusOne].mIndices;
-	mOutput << faceIndent << faceIndices[0] << ", " << faceIndices[1] << ", " << faceIndices[2] << endl;
 
-	// End the scope
-	mOutput << scopeIndent << "]";
+	face0 = faceIndices[0] + (*offset);
+	face1 = faceIndices[1] + (*offset);
+	face2 = faceIndices[2] + (*offset);
+
+	mOutput << scopeIndent << face0 << ", " << face1 << ", " << face2;
+
+	*offset += mesh->mNumFaces * 3;
 }
 
 // ------------------------------------------------------------------------------------------------
