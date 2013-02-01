@@ -98,6 +98,12 @@ private:
 	// obviously, this endl() doesn't flush() the stream 
 	const std::string endl;
 	const std::string indent;
+
+	static const unsigned int positionSize;
+	static const unsigned int normalSize;
+	static const unsigned int tangentSize;
+	static const unsigned int bitangentSize;
+	static const unsigned int colorSize;
 };
 
 }

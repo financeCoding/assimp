@@ -42,6 +42,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #if !defined(ASSIMP_BUILD_NO_EXPORT) && !defined(ASSIMP_BUILD_NO_SPECTRE_EXPORTER)
 
+#define SPECTRE_PAD_VERTEX_DATA
+
 #include "SpectreExporter.h"
 #include "../include/assimp/version.h"
 
@@ -61,6 +63,22 @@ void ExportSceneSpectre(const char* pFile,IOSystem* pIOSystem, const aiScene* pS
 }
 
 } // end of namespace Assimp
+
+const unsigned int floatSize = sizeof(float);
+
+#ifdef SPECTRE_PAD_VERTEX_DATA
+const unsigned int SpectreExporter::positionSize  = 4 * floatSize;
+const unsigned int SpectreExporter::normalSize    = 4 * floatSize;
+const unsigned int SpectreExporter::tangentSize   = 4 * floatSize;
+const unsigned int SpectreExporter::bitangentSize = 4 * floatSize;
+const unsigned int SpectreExporter::colorSize     = 4 * floatSize;
+#else
+const unsigned int SpectreExporter::positionSize  = 3 * floatSize;
+const unsigned int SpectreExporter::normalSize    = 3 * floatSize;
+const unsigned int SpectreExporter::tangentSize   = 3 * floatSize;
+const unsigned int SpectreExporter::bitangentSize = 3 * floatSize;
+const unsigned int SpectreExporter::colorSize     = 4 * floatSize;
+#endif
 
 // ------------------------------------------------------------------------------------------------
 SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
@@ -227,29 +245,28 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 	// Start the scope
 	mOutput << scopeIndent << "\"attributes\": [" << endl;
 
-	const unsigned int floatSize = sizeof(float);
 	const unsigned int stride = GetVertexStride(mesh);
 	unsigned int offset = 0;
 
 	WriteMeshVertexAttribute("POSITION", "float", 3, stride, offset);
-	offset += floatSize * 3;
+	offset += positionSize;
 
 	// Output normals
 	if (mesh->HasNormals()) {
 		mOutput << "," << endl;
 		WriteMeshVertexAttribute("NORMAL", "float", 3, stride, offset);
-		offset += floatSize * 3;
+		offset += normalSize;
 	}
 
 	// Output tangent/bitangent
 	if (mesh->HasTangentsAndBitangents()) {
 		mOutput << "," << endl;
 		WriteMeshVertexAttribute("TANGENT", "float", 3, stride, offset);
-		offset += floatSize * 3;
+		offset += tangentSize;
 
 		mOutput << "," << endl;
 		WriteMeshVertexAttribute("BITANGENT", "float", 3, stride, offset);
-		offset += floatSize * 3;
+		offset += bitangentSize;
 	}
 
 	// Output all texture coordinates
@@ -261,7 +278,11 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 		mOutput << "," << endl;
 		const unsigned int components = mesh->mNumUVComponents[c];
 		WriteMeshVertexAttribute(name.c_str(), "float", components, stride, offset);
+#ifdef SPECTRE_PAD_VERTEX_DATA
+		offset += floatSize * 4;
+#else
 		offset += floatSize * components;
+#endif
 	}
 
 	// Output all color channels
@@ -272,7 +293,7 @@ void SpectreExporter :: WriteMeshInputLayout(const aiMesh* mesh)
 		name[5] = (char)(c + 48);
 		mOutput << "," << endl;
 		WriteMeshVertexAttribute(name.c_str(), "float", 4, stride, offset);
-		offset += floatSize * 4;
+		offset += colorSize;
 	}
 
 	// End the scope
@@ -319,21 +340,37 @@ void SpectreExporter :: WriteVertexData(const aiMesh* mesh, unsigned int index)
 
 	// Output positions
 	aiVector3D position = mesh->mVertices[index];
+#ifdef SPECTRE_PAD_VERTEX_DATA
+	mOutput << scopeIndent << position.x << ", " << position.y << ", " << position.z << ", 1.0";
+#else
 	mOutput << scopeIndent << position.x << ", " << position.y << ", " << position.z;
-
+#endif
 	// Output normals
 	if (mesh->HasNormals()) {
 		aiVector3D normal = mesh->mNormals[index];
+#ifdef SPECTRE_PAD_VERTEX_DATA
+		mOutput << ", " << normal.x << ", " << normal.y << ", " << normal.z << ", 0.0";
+#else
 		mOutput << ", " << normal.x << ", " << normal.y << ", " << normal.z;
+#endif
 	}
 
 	// Output tangent/bitangent
 	if (mesh->HasTangentsAndBitangents()) {
 		aiVector3D tangent = mesh->mTangents[index];
-		mOutput << ", " << tangent.x << ", " << tangent.y << ", " << tangent.z;
 
+#ifdef SPECTRE_PAD_VERTEX_DATA
+		mOutput << ", " << tangent.x << ", " << tangent.y << ", " << tangent.z << ", 0.0";
+#else
+		mOutput << ", " << tangent.x << ", " << tangent.y << ", " << tangent.z;
+#endif
 		aiVector3D bitangent = mesh->mBitangents[index];
+
+#ifdef SPECTRE_PAD_VERTEX_DATA
+		mOutput << ", " << bitangent.x << ", " << bitangent.y << ", " << bitangent.z << ", 0.0";
+#else
 		mOutput << ", " << bitangent.x << ", " << bitangent.y << ", " << bitangent.z;
+#endif
 	}
 
 	// Output all texture coordinates
@@ -347,6 +384,12 @@ void SpectreExporter :: WriteVertexData(const aiMesh* mesh, unsigned int index)
 		for (unsigned int i = 0; i < uvComponents; ++i) {
 			mOutput << ", " << texCoord[i];
 		}
+
+#ifdef SPECTRE_PAD_VERTEX_DATA
+		for (unsigned int i = uvComponents; i < 4; ++i) {
+			mOutput << ", 0.0";
+		}
+#endif
 	}
 
 	// Output all color channels
@@ -492,30 +535,32 @@ void SpectreExporter ::  WriteTransform(const char* name, const aiMatrix4x4& tra
 // ------------------------------------------------------------------------------------------------
 unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
 {
-	const unsigned int floatSize = sizeof(float);
-
 	// Position
-	unsigned int stride = floatSize * 3;
+	unsigned int stride = positionSize;
 
 	// Normals
 	if (mesh->HasNormals()) {
-		stride += floatSize * 3;
+		stride += normalSize;
 	}
 
 	// Tangent/bitangent
 	if (mesh->HasTangentsAndBitangents()) {
-		stride += floatSize * 6;
+		stride += tangentSize + bitangentSize;
 	}
 
 	// Texture coordinates
 	const unsigned int numUVChannels = mesh->GetNumUVChannels();
-	
+
+#ifdef SPECTRE_PAD_VERTEX_DATA
+	stride += floatSize * 4 * numUVChannels;
+#else
 	for (unsigned int c = 0; c < numUVChannels; ++c) {
 		stride += floatSize * mesh->mNumUVComponents[c];
 	}
+#endif
 
 	// Color channels
-	stride += floatSize * 4 * mesh->GetNumColorChannels();
+	stride += colorSize * mesh->GetNumColorChannels();
 
 	return stride;
 }
