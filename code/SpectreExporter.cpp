@@ -100,7 +100,7 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 	const aiNode* rootNode = pScene->mRootNode;
 	WriteNode(rootNode->mChildren[0], rootNode->mChildren[1]->mChildren[0]);
 
-	mOutput << "}";
+	mOutput << endl << "}";
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -153,37 +153,61 @@ void SpectreExporter :: WriteNode(const aiNode* meshNode, const aiNode* hierarch
 
 	mesh = GetMesh(meshNode, meshCountMinusOne);
 	WriteMeshVertices(mesh);
-	mOutput << endl << indent << "]," << endl;
+	mOutput << endl << indent << "]";
 
 	// Write the indices
-	mOutput << indent << "\"indices\": [" << endl;
-	meshOffset = 0;
+	if (mesh->HasFaces()) {
+		mOutput << "," << endl << indent << "\"indices\": [" << endl;
+		meshOffset = 0;
 
-	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
-		mesh = GetMesh(meshNode, i);
+		for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+			mesh = GetMesh(meshNode, i);
 
+			WriteIndexData(mesh, &meshOffset);
+			mOutput << "," << endl;
+		}
+
+		mesh = GetMesh(meshNode, meshCountMinusOne);
 		WriteIndexData(mesh, &meshOffset);
-		mOutput << "," << endl;
+		mOutput << endl << indent << "]";
 	}
-
-	mesh = GetMesh(meshNode, meshCountMinusOne);
-	WriteIndexData(mesh, &meshOffset);
-	mOutput << endl << indent << "]," << endl;
 
 	// Write the bones
-	mOutput << indent << "\"bones\": [" << endl;
+	if (mesh->HasBones()) {
+		mOutput << "," << endl << indent << "\"bones\": [" << endl;
 
-	for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
-		mesh = GetMesh(meshNode, i);
+		// Write the root node
+		WriteBone(0, hierarchyNode);
+		mOutput << endl << scopeIndent << "}," << endl;
 
+		for (unsigned int i = 0; i < meshCountMinusOne; ++i) {
+			mesh = GetMesh(meshNode, i);
+
+			WriteMeshBones(mesh, hierarchyNode);
+			mOutput << "," << endl;
+		}
+
+		mesh = GetMesh(meshNode, meshCountMinusOne);
 		WriteMeshBones(mesh, hierarchyNode);
-		mOutput << "," << endl;
+
+		mOutput << endl << indent << "]";
 	}
 
-	mesh = GetMesh(meshNode, meshCountMinusOne);
-	WriteMeshBones(mesh, hierarchyNode);
+	// Write the animations
+	if (pScene->HasAnimations()) {
+		const unsigned int animationCountMinusOne = pScene->mNumAnimations - 1;
 
-	mOutput << endl << indent << "]";
+		mOutput << "," << endl << indent << "\"animations\": [" << endl;
+
+		for (unsigned int i = 0; i < animationCountMinusOne; ++i) {
+			WriteAnimation(pScene->mAnimations[i]);
+			mOutput << "," << endl;
+		}
+
+		WriteAnimation(pScene->mAnimations[animationCountMinusOne]);
+
+		mOutput << endl << indent << "]";
+	}
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -436,7 +460,7 @@ void SpectreExporter :: WriteIndexData(const aiMesh* mesh, unsigned int* offset)
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter ::  WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode)
+void SpectreExporter :: WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode)
 {
 	const unsigned int boneCountMinusOne = mesh->mNumBones - 1;
 
@@ -449,7 +473,7 @@ void SpectreExporter ::  WriteMeshBones(const aiMesh* mesh, const aiNode* hierar
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter ::  WriteBone(const aiBone* bone, const aiNode* hierarchyNode)
+void SpectreExporter :: WriteBone(const aiBone* bone, const aiNode* hierarchyNode)
 {
 	const std::string scopeIndent = indent + indent;
 	const std::string boneIndent = scopeIndent + indent;
@@ -457,11 +481,15 @@ void SpectreExporter ::  WriteBone(const aiBone* bone, const aiNode* hierarchyNo
 	// Begin the scope
 	mOutput << scopeIndent << "{" << endl;
 
-	// Output the bone name
-	mOutput << boneIndent << "\"name\": \"" << bone->mName.C_Str() << "\"," << endl;
-
 	// Find the node
-	const aiNode* boneNode = FindBoneInHierarchy(bone->mName, hierarchyNode);
+	// Check for the root node
+	// \todo Does the origin node always not affect any vertices? Seems to on MD5
+	const aiNode* boneNode = (bone)
+		? FindBoneInHierarchy(bone->mName, hierarchyNode)
+		: hierarchyNode;
+
+	// Output the bone name
+	mOutput << boneIndent << "\"name\": \"" << boneNode->mName.C_Str() << "\"," << endl;
 
 	// Output the transform
 	WriteTransform("transform", boneNode->mTransformation);
@@ -477,6 +505,11 @@ void SpectreExporter ::  WriteBone(const aiBone* bone, const aiNode* hierarchyNo
 		WriteTransform("offsetTransform", inverse);
 	} else {
 		WriteTransform("offsetTransform", bone->mOffsetMatrix);
+	}
+
+	// Don't output if there are no affected vertices
+	if (!bone) {
+		return;
 	}
 
 	// Output the vertices
@@ -519,7 +552,7 @@ void SpectreExporter ::  WriteBone(const aiBone* bone, const aiNode* hierarchyNo
 }
 
 // ------------------------------------------------------------------------------------------------
-void SpectreExporter ::  WriteTransform(const char* name, const aiMatrix4x4& transform)
+void SpectreExporter :: WriteTransform(const char* name, const aiMatrix4x4& transform)
 {
 	const std::string scopeIndent = indent + indent + indent;
 	const std::string rowIndent = scopeIndent + indent;
@@ -533,7 +566,131 @@ void SpectreExporter ::  WriteTransform(const char* name, const aiMatrix4x4& tra
 }
 
 // ------------------------------------------------------------------------------------------------
-unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
+void SpectreExporter ::  WriteAnimation(const aiAnimation* animation)
+{
+	const std::string scopeIndent = indent + indent;
+	const std::string animationIndent = scopeIndent + indent;
+
+	// Begin the scope
+	mOutput << scopeIndent << "{" << endl;
+
+	// Output the animation name
+	mOutput << animationIndent << "\"name\": \"" << animation->mName.C_Str() << "\"," << endl;
+
+	// Output the ticks per second
+	mOutput << animationIndent << "\"ticksPerSecond\": " << animation->mTicksPerSecond << "," << endl;
+
+	// Output the duration
+	mOutput << animationIndent << "\"duration\": " << animation->mDuration << "," << endl;
+
+	// Output the channels
+	const unsigned int numChannelsMinusOne = animation->mNumChannels - 1;
+
+	mOutput << animationIndent << "\"boneAnimations\": [" << endl;
+
+	for (unsigned int i = 0; i < numChannelsMinusOne; ++i) {
+		WriteAnimationChannel(animation->mChannels[i]);
+		mOutput << "," << endl;
+	}
+
+	WriteAnimationChannel(animation->mChannels[numChannelsMinusOne]);
+	mOutput << endl << animationIndent << "]";
+
+	// End the scope
+	mOutput << endl << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteAnimationChannel(const aiNodeAnim* channel)
+{
+	const std::string scopeIndent = indent + indent + indent + indent;
+	const std::string channelIndent = scopeIndent + indent;
+
+	// Begin the scope
+	mOutput << scopeIndent << "{" << endl;
+
+	// Write the channel name
+	mOutput << channelIndent << "\"name\": \"" << channel->mNodeName.C_Str() << "\"," << endl;
+
+	// Write the position keys
+	const unsigned int numPositionKeysMinusOne = channel->mNumPositionKeys - 1;
+
+	mOutput << channelIndent << "\"positions\": [" << endl;
+
+	for (unsigned int i = 0; i < numPositionKeysMinusOne; ++i) {
+		WriteVectorKey(channel->mPositionKeys[i]);
+		mOutput << "," << endl;
+	}
+
+	WriteVectorKey(channel->mPositionKeys[numPositionKeysMinusOne]);
+	mOutput << endl << channelIndent << "]," << endl;
+
+	// Write the rotation keys
+	const unsigned int numRotationKeysMinusOne = channel->mNumRotationKeys - 1;
+
+	mOutput << channelIndent << "\"rotations\": [" << endl;
+
+	for (unsigned int i = 0; i < numRotationKeysMinusOne; ++i) {
+		WriteQuaternionKey(channel->mRotationKeys[i]);
+		mOutput << "," << endl;
+	}
+
+	WriteQuaternionKey(channel->mRotationKeys[numRotationKeysMinusOne]);
+	mOutput << endl << channelIndent << "]," << endl;
+
+	// Write the scale keys
+	const unsigned int numScalingKeysMinusOne = channel->mNumScalingKeys - 1;
+
+	mOutput << channelIndent << "\"scales\": [" << endl;
+
+	for (unsigned int i = 0; i < numScalingKeysMinusOne; ++i) {
+		WriteVectorKey(channel->mScalingKeys[i]);
+		mOutput << "," << endl;
+	}
+
+	WriteVectorKey(channel->mScalingKeys[numPositionKeysMinusOne]);
+	mOutput << endl << channelIndent << "]" << endl;
+
+	// End the scope
+	mOutput << endl << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter ::  WriteVectorKey(const aiVectorKey& key)
+{
+	const std::string scopeIndent = indent + indent + indent + indent + indent + indent;
+	const std::string keyIndent = scopeIndent + indent;
+
+	// Begin the scope
+	mOutput << scopeIndent << "{" << endl;
+	
+	// Write the time
+	mOutput << keyIndent << "\"time\": " << key.mTime << "," << endl;
+	mOutput << keyIndent << "\"value\": [ " << key.mValue.x << ", " << key.mValue.y << ", " << key.mValue.z << "]" << endl;
+
+	// End the scope
+	mOutput << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+void SpectreExporter :: WriteQuaternionKey(const aiQuatKey& key)
+{
+	const std::string scopeIndent = indent + indent + indent + indent + indent + indent;
+	const std::string keyIndent = scopeIndent + indent;
+
+	// Begin the scope
+	mOutput << scopeIndent << "{" << endl;
+	
+	// Write the time
+	mOutput << keyIndent << "\"time\": " << key.mTime << "," << endl;
+	mOutput << keyIndent << "\"value\": [ " << key.mValue.x << ", " << key.mValue.y << ", " << key.mValue.z << ", " << key.mValue.w << "]" << endl;
+
+	// End the scope
+	mOutput << scopeIndent << "}";
+}
+
+// ------------------------------------------------------------------------------------------------
+unsigned int SpectreExporter :: GetVertexStride(const aiMesh* mesh)
 {
 	// Position
 	unsigned int stride = positionSize;
@@ -566,7 +723,7 @@ unsigned int SpectreExporter ::  GetVertexStride(const aiMesh* mesh)
 }
 
 // ------------------------------------------------------------------------------------------------
-const aiNode* SpectreExporter ::  FindBoneInHierarchy(const aiString& name, const aiNode* node)
+const aiNode* SpectreExporter :: FindBoneInHierarchy(const aiString& name, const aiNode* node)
 {
 	if (name == node->mName) {
 		return node;

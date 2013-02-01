@@ -81,6 +81,10 @@ private:
 	void WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode);
 	void WriteBone(const aiBone* bone, const aiNode* hierarchyNode);
 	void WriteTransform(const char* name, const aiMatrix4x4& transform);
+	void WriteAnimation(const aiAnimation* animation);
+	void WriteAnimationChannel(const aiNodeAnim* channel);
+	void WriteVectorKey(const aiVectorKey& key);
+	void WriteQuaternionKey(const aiQuatKey& key);
 
 	static unsigned int GetVertexStride(const aiMesh* mesh);
 	static const aiNode* FindBoneInHierarchy(const aiString& name, const aiNode* node);
