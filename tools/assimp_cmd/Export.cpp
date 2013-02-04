@@ -160,6 +160,9 @@ int Assimp_Export(const char* const* params, unsigned int num)
 	out += "."+outext;
 
 	// and call the export routine
+	import.log = true;
+	import.showLog = true;
+	import.verbose = true;
 	if(!ExportModel(scene, import, out,e->id)) {
 		return -25;
 	}

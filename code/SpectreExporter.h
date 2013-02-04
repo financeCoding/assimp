@@ -78,7 +78,8 @@ private:
 	void WriteMeshVertices(const aiMesh* mesh);
 	void WriteVertexData(const aiMesh* mesh, unsigned int index);
 	void WriteIndexData(const aiMesh* mesh, unsigned int* offset);
-	void WriteMeshBones(const aiMesh* mesh, const aiNode* hierarchyNode);
+	void WriteMeshBones(const aiNode* meshNode, const aiNode* boneNode, int depth = 0);
+	//const aiMesh* mesh, const aiNode* hierarchyNode);
 	void WriteBone(const aiBone* bone, const aiNode* hierarchyNode);
 	void WriteTransform(const char* name, const aiMatrix4x4& transform);
 	void WriteAnimation(const aiAnimation* animation);
@@ -102,6 +103,8 @@ private:
 	// obviously, this endl() doesn't flush() the stream 
 	const std::string endl;
 	const std::string indent;
+
+	Logger* logger;
 
 	static const unsigned int positionSize;
 	static const unsigned int normalSize;
