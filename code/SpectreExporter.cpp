@@ -169,6 +169,13 @@ void SpectreExporter :: WriteNode(const aiNode* meshNode, const aiNode* hierarch
 	WriteMeshPart(mesh, &meshOffset);
 	mOutput << endl << indent << "]," << endl;
 
+	// Write the inverse root
+	aiMatrix4x4 inverse(pScene->mRootNode->mTransformation);
+	inverse.Inverse();
+
+	WriteTransform("inverseRootTransform", inverse);
+	mOutput << "," << endl;
+
 	// Write the primitive type
 	mOutput << indent << "\"primitive\": \"triangles\"," << endl;
 
@@ -574,7 +581,7 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 
 	std::vector<unsigned int> vertices;
 	std::vector<float> weights;
-	const aiBone* bone;
+	const aiBone* bone = 0;
 
 	for (unsigned int i = 0; i < numMeshes; ++i) {
 		const aiMesh* mesh = GetMesh(meshNode, i);
@@ -607,16 +614,7 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 	}
 
 	// Output the offset matrix
-	// Check for the root node
-	if (depth == 0) {
-		// Invert the transform for the root node
-		aiMatrix4x4 inverse(boneNode->mTransformation);
-		inverse.Inverse();
-
-		WriteTransform("offsetTransform", inverse);
-	} else {
-		WriteTransform("offsetTransform", bone->mOffsetMatrix);
-	}
+	WriteTransform("offsetTransform", bone->mOffsetMatrix);
 
 	mOutput << "," << endl;
 
@@ -777,7 +775,8 @@ void SpectreExporter ::  WriteAnimation(const aiAnimation* animation)
 	mOutput << scopeIndent << "{" << endl;
 
 	// Output the animation name
-	mOutput << animationIndent << "\"name\": \"" << animation->mName.C_Str() << "\"," << endl;
+	// \todo Use the animation name or generate a name
+	mOutput << animationIndent << "\"name\": \"" << "armup" << "\"," << endl;
 
 	// Output the ticks per second
 	mOutput << animationIndent << "\"ticksPerSecond\": " << animation->mTicksPerSecond << "," << endl;
