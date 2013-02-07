@@ -92,6 +92,10 @@ private:
 
 	inline const aiMesh* GetMesh(const aiNode* node, unsigned int index)
 	{
+		int actual = node->mMeshes[index];
+		if (index!=actual) {
+			std::cout << "HELLO\n";
+		}
 		return pScene->mMeshes[node->mMeshes[index]];
 	}
 

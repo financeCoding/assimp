@@ -128,6 +128,7 @@ SpectreExporter :: SpectreExporter(const char* _filename, const aiScene* pScene)
 	// Write out the mesh file.
 	// Currently assuming MD5
 	const aiNode* rootNode = pScene->mRootNode;
+//	WriteNode(rootNode->mChildren[0], rootNode->mChildren[1]);
 	WriteNode(rootNode->mChildren[0], rootNode->mChildren[1]->mChildren[0]);
 
 	mOutput << endl << "}";
@@ -583,15 +584,19 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 	std::vector<float> weights;
 	const aiBone* bone = 0;
 
+	bool wroteOffset = false;
+
 	for (unsigned int i = 0; i < numMeshes; ++i) {
 		const aiMesh* mesh = GetMesh(meshNode, i);
 
 		// Iterate over bones
 		const unsigned int numBones = mesh->mNumBones;
+		logger->debug(boost::str(boost::format("Mesh %s has %d bones") % mesh->mName.C_Str() % numBones));
 
 		for (unsigned int j = 0; j < numBones; ++j) {
 			bone = mesh->mBones[j];
 
+			logger->debug(boost::str(boost::format("Bone name: %s") % bone->mName.C_Str()));
 			if (bone->mName == boneNode->mName) {
 				logger->debug(boost::str(boost::format("Mesh %s at index %d uses bone %s") % mesh->mName.C_Str() % i % boneNode->mName.C_Str()));
 
@@ -605,6 +610,15 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 					weights.push_back(vertexWeight.mWeight);
 				}
 
+				if (!wroteOffset) {
+					// Output the offset matrix
+					WriteTransform("offsetTransform", bone->mOffsetMatrix);
+
+					mOutput << "," << endl;
+				}
+
+				wroteOffset = true;
+
 				break;
 			}
 		}
@@ -613,10 +627,18 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 		offset += mesh->mNumVertices;
 	}
 
-	// Output the offset matrix
-	WriteTransform("offsetTransform", bone->mOffsetMatrix);
+	if (!wroteOffset) {
 
-	mOutput << "," << endl;
+		aiMatrix4x4 inverse(boneNode->mTransformation);
+
+
+		inverse.Inverse();
+
+
+
+		WriteTransform("offsetTransform", inverse);
+		mOutput << "," << endl;
+	}
 
 	const unsigned int numWeights = vertices.size();
 	const unsigned int numWeightsMinusOne = numWeights - 1;
