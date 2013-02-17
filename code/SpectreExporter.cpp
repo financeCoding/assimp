@@ -613,7 +613,6 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 				if (!wroteOffset) {
 					// Output the offset matrix
 					WriteTransform("offsetTransform", bone->mOffsetMatrix);
-
 					mOutput << "," << endl;
 				}
 
@@ -630,11 +629,7 @@ void SpectreExporter :: WriteMeshBones(const aiNode* meshNode, const aiNode* bon
 	if (!wroteOffset) {
 
 		aiMatrix4x4 inverse(boneNode->mTransformation);
-
-
 		inverse.Inverse();
-
-
 
 		WriteTransform("offsetTransform", inverse);
 		mOutput << "," << endl;
